@@ -12,7 +12,9 @@ namespace core {
 // Integrated with RK4. vx is held constant over the step (no throttle input yet).
 class KinematicBicycleModel : public IVehicleModel {
 public:
-    explicit KinematicBicycleModel(VehicleParams params);
+    // params must outlive this model -- it's read fresh on every step so that
+    // live GUI tuning of wheelbase/max_steer takes effect immediately.
+    explicit KinematicBicycleModel(const VehicleParams* params);
 
     VehicleState step(const VehicleState& state, double delta, double dt) const override;
 
@@ -25,7 +27,7 @@ private:
 
     Derivative computeDerivative(const VehicleState& state, double delta) const;
 
-    VehicleParams params_;
+    const VehicleParams* params_;
 };
 
 } // namespace core

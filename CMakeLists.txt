@@ -23,6 +23,31 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(SFML)
 
+# Dear ImGui has no CMakeLists.txt of its own, so only populate its source tree
+# (imgui-sfml's CMakeLists picks the sources up via IMGUI_DIR below).
+FetchContent_Declare(
+  imgui
+  GIT_REPOSITORY https://github.com/ocornut/imgui.git
+  GIT_TAG v1.91.6
+  GIT_SHALLOW ON
+)
+FetchContent_GetProperties(imgui)
+if(NOT imgui_POPULATED)
+  FetchContent_Populate(imgui)
+endif()
+
+set(IMGUI_DIR ${imgui_SOURCE_DIR} CACHE PATH "" FORCE)
+set(IMGUI_SFML_FIND_SFML OFF CACHE BOOL "" FORCE) # SFML targets already exist from FetchContent above
+set(IMGUI_SFML_IMGUI_DEMO OFF CACHE BOOL "" FORCE)
+
+FetchContent_Declare(
+  imgui_sfml
+  GIT_REPOSITORY https://github.com/SFML/imgui-sfml.git
+  GIT_TAG v2.6.1
+  GIT_SHALLOW ON
+)
+FetchContent_MakeAvailable(imgui_sfml)
+
 file(GLOB_RECURSE SIM_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_SOURCE_DIR}/src/*.cpp
 )
@@ -37,4 +62,5 @@ target_link_libraries(car_sim PRIVATE
   sfml-graphics
   sfml-window
   sfml-system
+  ImGui-SFML::ImGui-SFML
 )

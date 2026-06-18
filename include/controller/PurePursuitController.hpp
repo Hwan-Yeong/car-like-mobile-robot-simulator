@@ -1,6 +1,7 @@
 #pragma once
 
 #include "controller/IController.hpp"
+#include "core/VehicleParams.hpp"
 
 namespace controller {
 
@@ -10,7 +11,10 @@ namespace controller {
 //   delta = atan2(2 * L * sin(alpha), Ld)
 class PurePursuitController : public IController {
 public:
-    PurePursuitController(double wheelbase, double k, double min_lookahead, double max_lookahead);
+    // params must outlive this controller -- wheelbase is read fresh on every
+    // call so that live GUI tuning takes effect immediately.
+    PurePursuitController(const core::VehicleParams* params, double k, double min_lookahead,
+                           double max_lookahead);
 
     double computeSteering(const core::VehicleState& state, const core::Path& path) const override;
 
@@ -18,7 +22,7 @@ private:
     core::Waypoint findLookaheadTarget(const core::VehicleState& state, const core::Path& path,
                                         double lookahead) const;
 
-    double wheelbase_;
+    const core::VehicleParams* params_;
     double k_;
     double min_lookahead_;
     double max_lookahead_;

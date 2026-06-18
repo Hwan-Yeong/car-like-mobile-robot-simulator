@@ -18,6 +18,11 @@ void SimulationEngine::step(double dt) {
     notifyObservers();
 }
 
+void SimulationEngine::reset(const core::VehicleState& state) {
+    state_ = state;
+    notifyObservers();
+}
+
 void SimulationEngine::notifyObservers() {
     for (ISimulationObserver* observer : observers_) {
         observer->onStateUpdated(state_);

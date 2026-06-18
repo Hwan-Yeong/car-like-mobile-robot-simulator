@@ -67,3 +67,6 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# ImGui persisted window layout (runtime-generated, per-user)
+imgui.ini

@@ -24,6 +24,16 @@ public:
     // Advances the simulation by dt seconds and notifies observers.
     void step(double dt);
 
+    void setModel(std::unique_ptr<core::IVehicleModel> model) { model_ = std::move(model); }
+    void setController(std::unique_ptr<controller::IController> controller) {
+        controller_ = std::move(controller);
+    }
+    void setPath(core::Path path) { path_ = std::move(path); }
+    void setSpeed(double vx) { state_.vx = vx; }
+
+    // Overwrites the state directly (e.g. repositioning onto a new path) and notifies observers.
+    void reset(const core::VehicleState& state);
+
     const core::VehicleState& state() const { return state_; }
     const core::Path& path() const { return path_; }
 

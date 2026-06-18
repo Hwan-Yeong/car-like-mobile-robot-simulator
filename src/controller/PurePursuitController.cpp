@@ -6,9 +6,9 @@
 
 namespace controller {
 
-PurePursuitController::PurePursuitController(double wheelbase, double k, double min_lookahead,
-                                               double max_lookahead)
-    : wheelbase_(wheelbase), k_(k), min_lookahead_(min_lookahead), max_lookahead_(max_lookahead) {}
+PurePursuitController::PurePursuitController(const core::VehicleParams* params, double k,
+                                               double min_lookahead, double max_lookahead)
+    : params_(params), k_(k), min_lookahead_(min_lookahead), max_lookahead_(max_lookahead) {}
 
 core::Waypoint PurePursuitController::findLookaheadTarget(const core::VehicleState& state,
                                                             const core::Path& path,
@@ -51,7 +51,7 @@ double PurePursuitController::computeSteering(const core::VehicleState& state,
     const double alpha = target_bearing - state.psi;
 
     const double ld = std::max(std::hypot(dx, dy), 1e-6);
-    return std::atan2(2.0 * wheelbase_ * std::sin(alpha), ld);
+    return std::atan2(2.0 * params_->wheelbase * std::sin(alpha), ld);
 }
 
 } // namespace controller

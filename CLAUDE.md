@@ -14,15 +14,16 @@ The project is built in phases, each one compiling and running before the next s
 progress against the list below rather than assuming everything is implemented.
 
 - **Phase 1 (done):** `KinematicBicycleModel` + `PurePursuitController` + SFML render, car follows an oval path.
-- **Phase 2:** ImGui panels (param sliders, runtime model/controller/path selection).
+- **Phase 2 (done):** ImGui panels (`ParamPanel` sliders, `ControlPanel` runtime model/controller/path
+  selection, play/pause/reset, target speed). Oval and figure-eight paths are both selectable.
 - **Phase 3:** `DynamicBicycleModel` (2-DOF lateral dynamics) + ImPlot telemetry.
 - **Phase 4:** `StanleyController` (compare against Pure Pursuit).
 - **Phase 5:** MPC controller (Eigen-based QP).
 - **Phase 6:** YAML config loading, README with screenshots/GIFs.
 
-Dependencies are wired into `CMakeLists.txt` only when the phase that needs them starts — e.g. ImGui/ImPlot/
-imgui-sfml aren't fetched until Phase 2/3, Eigen3 isn't linked until Phase 5, yaml-cpp until Phase 6. Don't
-add a dependency to the build before the code that uses it exists.
+Dependencies are wired into `CMakeLists.txt` only when the phase that needs them starts — e.g. ImPlot isn't
+fetched until Phase 3, Eigen3 isn't linked until Phase 5, yaml-cpp until Phase 6. Don't add a dependency to
+the build before the code that uses it exists.
 
 ## Build / run
 
@@ -45,9 +46,15 @@ suppress.
   disabled (`SFML_BUILD_AUDIO`/`SFML_BUILD_NETWORK` OFF) since this project has no sound and no networking.
 - Eigen3 (3.4.0) and yaml-cpp (0.7.0) are already available as system packages (`libeigen3-dev`,
   `libyaml-cpp-dev`) — use `find_package`, not `FetchContent`, when those phases wire them in.
-- When Phase 2 adds ImGui/ImPlot/imgui-sfml via FetchContent: pin `imgui-sfml` to tag `v2.6.1` (the SFML-2.x
-  compatible release; `master` now targets SFML 3 and won't link), Dear ImGui to `v1.91.6`, and ImPlot to
-  `v0.17`.
+- ImGui (`v1.91.6`) and imgui-sfml (`v2.6.1` — the SFML-2.x compatible release; `master` now targets SFML 3
+  and won't link) are fetched via `FetchContent` in `CMakeLists.txt`. ImGui has no CMakeLists.txt of its own,
+  so it's only `FetchContent_Populate`d (not `MakeAvailable`d) and its source dir is pointed to via the
+  `IMGUI_DIR` cache variable that imgui-sfml's own build expects. `IMGUI_SFML_FIND_SFML` is forced `OFF` so it
+  links the `sfml-graphics` target our own FetchContent already built, instead of re-running `find_package`.
+  When Phase 3 adds ImPlot, pin it to `v0.17`.
+- ImGui persists window positions/sizes to an `imgui.ini` it writes next to the working directory at exit —
+  it's gitignored. Delete it if a panel seems to have the wrong position/size after a layout code change;
+  `ImGuiCond_FirstUseEver` is silently ignored once a window has a saved entry in that file.
 
 ## Architecture
 
@@ -72,10 +79,22 @@ Modules, in dependency order:
   follow-cam (recenters on the vehicle each frame). `SFMLRenderer` implements `ISimulationObserver`, drawing
   the path and vehicle each frame using the camera's current `pixelsPerMeter()` — vehicle/path sizes must be
   computed from that, not a hardcoded pixel scale, or they desync from zoom.
-- **`gui/`** (Phase 2+) — ImGui panels: `ParamPanel` (sliders for `Cf`, `Cr`, `m`, `Iz`, `a`, `b`, `L`,
-  `max_steer`), `ControlPanel` (play/pause/reset, target speed, path selector, model/controller selector),
-  `TelemetryPanel` (ImPlot time-series of side-slip `beta`, yaw rate `r`, cross-track error, steering `delta`,
-  speed).
+- **`gui/`** — ImGui panels. `ParamPanel` draws sliders for whichever `VehicleParams` fields exist today
+  (`wheelbase`, `max_steer`; Phase 3 adds `Cf`/`Cr`/`m`/`Iz` once `DynamicBicycleModel` needs them) bound
+  directly to a live `VehicleParams&`. `ControlPanel` draws play/pause/reset, target speed, and path/model/
+  controller selectors, but is deliberately ignorant of `engine::SimulationEngine` — it only mutates a plain
+  `ControlPanelState` struct that `main.cpp` reads each frame and acts on (calling `setPath`/`setModel`/
+  `setController`/`setSpeed`/`reset`). This keeps `gui/` decoupled from `engine/`; it depends only on
+  `core/` types and primitives. `TelemetryPanel` (Phase 3) will follow the same pattern with ImPlot.
+  Combo box contents come from `ModelFactory::vehicleModelNames()`/`controllerNames()`, not hardcoded lists,
+  so registering a new model/controller in the factory is enough to make it selectable.
+
+**Live parameter tuning:** `KinematicBicycleModel` and `PurePursuitController` hold a `const VehicleParams*`
+rather than a copy, and `ModelFactory::createVehicleModel`/`createController` take a pointer too. `main.cpp`
+owns the one `VehicleParams` instance and passes its address through; `ParamPanel` mutates that same instance
+directly via ImGui sliders, so changes apply on the very next `step()` with no extra wiring. Any future
+model/controller that reads tunable params needs to follow the same by-pointer pattern, not take a by-value
+copy at construction — otherwise sliders will silently do nothing.
 
 ### Vehicle model math (get this right — it's the point of the project)
 

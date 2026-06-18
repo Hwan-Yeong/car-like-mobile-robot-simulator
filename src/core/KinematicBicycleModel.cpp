@@ -5,19 +5,19 @@
 
 namespace core {
 
-KinematicBicycleModel::KinematicBicycleModel(VehicleParams params) : params_(params) {}
+KinematicBicycleModel::KinematicBicycleModel(const VehicleParams* params) : params_(params) {}
 
 KinematicBicycleModel::Derivative KinematicBicycleModel::computeDerivative(
     const VehicleState& state, double delta) const {
     return {
         state.vx * std::cos(state.psi),
         state.vx * std::sin(state.psi),
-        state.vx * std::tan(delta) / params_.wheelbase,
+        state.vx * std::tan(delta) / params_->wheelbase,
     };
 }
 
 VehicleState KinematicBicycleModel::step(const VehicleState& state, double delta, double dt) const {
-    const double clamped_delta = std::clamp(delta, -params_.max_steer, params_.max_steer);
+    const double clamped_delta = std::clamp(delta, -params_->max_steer, params_->max_steer);
 
     auto advance = [&](const VehicleState& s, const Derivative& d, double h) {
         VehicleState next = s;
