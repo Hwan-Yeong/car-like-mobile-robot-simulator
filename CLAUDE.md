@@ -19,12 +19,12 @@ progress against the list below rather than assuming everything is implemented.
 - **Phase 3 (done):** `DynamicBicycleModel` (2-DOF lateral dynamics, selectable alongside the kinematic
   model) + `TelemetryPanel` (ImPlot time-series of side-slip, yaw rate, cross-track error, steering, speed).
 - **Phase 4 (done):** `StanleyController`, selectable alongside Pure Pursuit via the same `ControlPanel` combo.
-- **Phase 5:** MPC controller (Eigen-based QP).
+- **Phase 5 (done):** `MPCController` (condensed linear MPC solved via Eigen), selectable alongside Pure
+  Pursuit and Stanley.
 - **Phase 6:** YAML config loading, README with screenshots/GIFs.
 
-Dependencies are wired into `CMakeLists.txt` only when the phase that needs them starts — e.g. Eigen3 isn't
-linked until Phase 5, yaml-cpp until Phase 6. Don't add a dependency to the build before the code that uses
-it exists.
+Dependencies are wired into `CMakeLists.txt` only when the phase that needs them starts — e.g. yaml-cpp
+isn't linked until Phase 6. Don't add a dependency to the build before the code that uses it exists.
 
 ## Build / run
 
@@ -45,8 +45,10 @@ suppress.
 - Ubuntu 22.04's apt only ships SFML 2.5.1; the project needs 2.6, so `CMakeLists.txt` fetches and builds
   SFML 2.6.1 from source via `FetchContent` rather than `find_package`. Audio/network SFML modules are
   disabled (`SFML_BUILD_AUDIO`/`SFML_BUILD_NETWORK` OFF) since this project has no sound and no networking.
-- Eigen3 (3.4.0) and yaml-cpp (0.7.0) are already available as system packages (`libeigen3-dev`,
-  `libyaml-cpp-dev`) — use `find_package`, not `FetchContent`, when those phases wire them in.
+- Eigen3 (3.4.0) and yaml-cpp (0.7.0) are available as system packages (`libeigen3-dev`, `libyaml-cpp-dev`).
+  Eigen3 is wired in via `find_package(Eigen3 3.4 REQUIRED)` + `Eigen3::Eigen` (header-only, no FetchContent
+  needed since the system package ships a proper CMake config). Use the same `find_package` approach for
+  yaml-cpp when Phase 6 wires it in.
 - ImGui (`v1.91.6`) and imgui-sfml (`v2.6.1` — the SFML-2.x compatible release; `master` now targets SFML 3
   and won't link) are fetched via `FetchContent` in `CMakeLists.txt`. ImGui has no CMakeLists.txt of its own,
   so it's only `FetchContent_Populate`d (not `MakeAvailable`d) and its source dir is pointed to via the
@@ -70,9 +72,9 @@ Modules, in dependency order:
 - **`core/`** — value types (`VehicleState` = `[X, Y, psi, vx, vy, r]`, `VehicleParams`, `Waypoint`/`Path`,
   plus path-geometry helpers `initialHeading`/`crossTrackError`) and the `IVehicleModel` **Strategy**
   interface with its implementations: `KinematicBicycleModel` and `DynamicBicycleModel`.
-- **`controller/`** — the `IController` **Strategy** interface and implementations (`PurePursuitController`
-  now, `StanleyController`/MPC controller later). Controllers consume a `VehicleState` + `Path` and return a
-  steering command; they don't know which model produced the state.
+- **`controller/`** — the `IController` **Strategy** interface and implementations (`PurePursuitController`,
+  `StanleyController`, `MPCController`). Controllers consume a `VehicleState` + `Path` and return a steering
+  command; they don't know which model produced the state.
 - **`engine/`** — `SimulationEngine` owns the current model, controller, path, and state, and drives the
   fixed-timestep update loop (`step(dt)`: ask the controller for steering, advance the model, notify
   observers, cache the steering value as `lastSteering()` for the telemetry panel to read). Renderer/GUI
@@ -139,4 +141,20 @@ copy at construction — otherwise sliders will silently do nothing.
   mistake. `k_soft` prevents a singular/huge steering command at `vx` near 0. Like Pure Pursuit, it assumes
   `state.x/y` is close enough to the rear axle that `wheelbase` is the right front-axle offset even when
   `DynamicBicycleModel` (CG-referenced) is active — a known simplification, not exact for that model.
-- **MPC** (Phase 5) — linearized lateral error model, QP solved each step with Eigen.
+- **MPC** — re-linearizes a small lateral error model every control step around the current speed and the
+  path's local curvature: state `x = [e_y, e_psi]` (lateral error, heading error vs. the path tangent at the
+  nearest point), with `e_y_dot = vx*e_psi` and `e_psi_dot = (vx/L)*delta - vx*kappa` (small-angle Frenet
+  kinematics; `kappa` estimated from the heading change between the path segments before/after the nearest
+  point, divided by segment length). `e_y` is the position-error vector projected onto the path's *left*
+  normal (`-dx*sin(path_heading) + dy*cos(path_heading)`) — note this is the opposite sign convention from
+  Stanley's cross-track projection, which is fine since each controller only needs to be internally
+  consistent with its own model derivation, not match another controller's convention.
+  Discretized (`dt_mpc`) and stacked over `horizon` steps into condensed prediction matrices (`Sx`, `Su`,
+  `Sd`, built iteratively: `Sx[k] = A*Sx[k-1]`, `Su[k] = A*Su[k-1]` with `B` placed in column `k`, `Sd[k] =
+  A*Sd[k-1] + Bd`). The cost `sum_k x_k^T Q x_k + r*delta_k^2` has no inequality constraints, so the "QP"
+  reduces to one dense linear solve, `U = -(Su^T*Qbar*Su + Rbar).ldlt().solve(Su^T*Qbar*(Sx*x0 + Sd*kappa))`
+  — this is the intended use of Eigen here (dense linear algebra), not a general-purpose inequality-
+  constrained QP solver; nothing like OSQP/qpOASES was added. Only `U(0)` is applied (receding horizon),
+  clamped to `+-max_steer`. Default tuning in `ModelFactory` (`horizon=15`, `dt_mpc=0.1` → 1.5s lookahead,
+  `q_lateral=5`, `q_heading=3`, `r_steering=1`) tracks both the oval and figure-eight with cross-track error
+  bounded under ~0.15m at the default 5 m/s target speed — verified visually, not unit tested.

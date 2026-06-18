@@ -60,6 +60,8 @@ if(NOT implot_POPULATED)
   FetchContent_Populate(implot)
 endif()
 
+find_package(Eigen3 3.4 REQUIRED)
+
 file(GLOB_RECURSE SIM_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_SOURCE_DIR}/src/*.cpp
 )
@@ -80,4 +82,5 @@ target_link_libraries(car_sim PRIVATE
   sfml-window
   sfml-system
   ImGui-SFML::ImGui-SFML
+  Eigen3::Eigen
 )
