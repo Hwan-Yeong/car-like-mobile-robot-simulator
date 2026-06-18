@@ -31,6 +31,12 @@ progress against the list below rather than assuming everything is implemented.
 All six planned phases are complete. Further work (new models/controllers/paths, tests, packaging) isn't
 scoped yet — ask before assuming a "Phase 7."
 
+**Post-Phase-6 additions:** five stylized real-circuit paths (`core/Circuits.hpp`: Suzuka, Monaco,
+Silverstone, Spa-Francorchamps, Monza) and a richer renderer (asphalt road ribbon with curbs instead of a
+thin line; a procedural vector car silhouette instead of a plain rectangle) — see the `core::Circuits` and
+`renderer::SFMLRenderer` notes under Architecture below. No textures/sprites/downloaded images were used
+anywhere (avoids licensing risk); everything is vector geometry drawn with SFML shapes.
+
 Dependencies are wired into `CMakeLists.txt` only when the phase that needs them starts. Don't add a
 dependency to the build before the code that uses it exists.
 
@@ -77,9 +83,21 @@ Header/impl split: public interfaces and types live under `include/<module>/`, i
 Modules, in dependency order:
 
 - **`core/`** — value types (`VehicleState` = `[X, Y, psi, vx, vy, r]`, `VehicleParams`, `Waypoint`/`Path`,
-  plus path-geometry helpers `initialHeading`/`crossTrackError`), the `IVehicleModel` **Strategy** interface
-  with its implementations (`KinematicBicycleModel`, `DynamicBicycleModel`), and `SimulationConfig`/
-  `loadConfig` for startup YAML config.
+  plus path-geometry helpers `initialHeading`/`crossTrackError`/`smoothClosedPath`), the `IVehicleModel`
+  **Strategy** interface with its implementations (`KinematicBicycleModel`, `DynamicBicycleModel`), and
+  `SimulationConfig`/`loadConfig` for startup YAML config. `core/Circuits.hpp` adds five real-circuit path
+  generators (`makeSuzukaPath`, `makeMonacoPath`, `makeSilverstonePath`, `makeSpaPath`, `makeMonzaPath`).
+  Suzuka is a closed-form cosine-modulated lemniscate (the natural shape for its figure-8 crossover); the
+  other four are small hand-placed anchor-point outlines (10-11 points each) smoothed into a dense drivable
+  path via `smoothClosedPath`'s uniform Catmull-Rom interpolation. **These are stylized approximations of
+  each circuit's recognizable silhouette and corner sequence, built from general knowledge, not surveyed or
+  GPS-accurate coordinates** — say so if asked whether they're precise. Anchors are scaled (bounding box
+  ~100-160m) to stay in the same order of magnitude as the original oval/figure-eight so the existing
+  controller gains (Pure Pursuit lookahead, Stanley/MPC gains) keep working without retuning. Monaco and Spa
+  each have one anchor pulled inward to evoke a tight hairpin (Grand Hotel Hairpin, La Source) without
+  causing an actual self-intersection; if a future track needs a tighter pinch, check the resulting
+  cross-track error in `TelemetryPanel` empirically (analytically bounding Catmull-Rom curvature isn't done
+  here) rather than assuming it's drivable.
 - **`controller/`** — the `IController` **Strategy** interface and implementations (`PurePursuitController`,
   `StanleyController`, `MPCController`). Controllers consume a `VehicleState` + `Path` and return a steering
   command; they don't know which model produced the state.
@@ -91,9 +109,26 @@ Modules, in dependency order:
   pattern) so swapping implementations at runtime doesn't require the engine or `main.cpp` to know concrete
   types.
 - **`renderer/`** — `Camera` handles the world(meters, Y-up)↔screen(pixels, Y-down) transform, pan/zoom, and
-  follow-cam (recenters on the vehicle each frame). `SFMLRenderer` implements `ISimulationObserver`, drawing
-  the path and vehicle each frame using the camera's current `pixelsPerMeter()` — vehicle/path sizes must be
-  computed from that, not a hardcoded pixel scale, or they desync from zoom.
+  follow-cam (recenters on the vehicle each frame). `SFMLRenderer` implements `ISimulationObserver` and draws
+  two things each frame, both recomputed from `path_`/`latest_state_` rather than cached (cheap at this
+  path size, and trivially correct whenever the path/state changes):
+  - `drawRoad()` — a filled asphalt ribbon: at each waypoint, offsets left/right by `kRoadHalfWidth` along
+    the *averaged* incoming/outgoing segment normal (not just the outgoing one, or corners would gap), drawn
+    as one closed `TriangleStrip`; plus a second `Quads` pass just outside that for alternating red/white
+    curb segments. All offset points go through `camera_.worldToScreen()` per vertex per frame, same as the
+    old single-line path drawing this replaced.
+  - `drawCar()` — a procedural vector silhouette (`car_body_` tapered `ConvexShape`, `car_cabin_`, two
+    `CircleShape` headlights, four wheel `RectangleShape`s), built once in the constructor in **car-local
+    meters** (origin = vehicle reference point, +x = forward) and redrawn via one shared
+    `sf::Transform{translate(screen_pos); rotate(-psi_deg); scale(ppm, ppm)}` passed as `sf::RenderStates` —
+    deliberately *not* via each shape's own `setPosition`/`setRotation`, so all parts stay rigidly attached
+    in one transform. The `rotate(-psi...)` sign (negating world heading) is required, not arbitrary: world
+    is Y-up but screen is Y-down, so a plain rotation by `+psi` would place the nose on the wrong side. The
+    fix only works cleanly because the car shape is bilaterally symmetric (headlights, wheels, body all
+    mirror across the centerline) — a symmetric shape can't visually distinguish "rotated by ψ in Y-up" from
+    "rotated by ψ with the lateral axis flipped," which is exactly what plain `rotate(-psi)` + uniform
+    `scale(ppm, ppm)` produces. **If an asymmetric car-shape detail is ever added (e.g. a left-only mirror or
+    turn signal), this transform needs revisiting** — it would render mirrored left-right.
 - **`gui/`** — ImGui panels. `ParamPanel` draws sliders for `VehicleParams`, grouped by which model uses them
   (kinematic: `wheelbase`/`max_steer`; dynamic: `Cf`/`Cr`/`m`/`Iz`/`a`/`b`) bound directly to a live
   `VehicleParams&` — all sliders are always visible regardless of which model is active, since switching

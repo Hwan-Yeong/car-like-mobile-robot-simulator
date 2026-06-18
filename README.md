@@ -5,6 +5,7 @@ modeling, control, and software-architecture skills used in autonomous-driving s
 vehicle follows a reference path; the vehicle model and path-tracking controller are swappable at runtime,
 physical parameters are tunable via sliders, and telemetry is plotted live.
 
+![Suzuka circuit, asphalt road rendering](assets/demo_suzuka_road.png)
 ![Oval path, Pure Pursuit, Kinematic Bicycle model](assets/demo_oval_pure_pursuit.png)
 ![Figure-eight path, MPC controller](assets/demo_figure_eight_mpc.png)
 
@@ -15,7 +16,12 @@ physical parameters are tunable via sliders, and telemetry is plotted live.
 - **Controllers** (swappable at runtime): `PurePursuitController` (adaptive lookahead), `StanleyController`
   (front-axle heading + cross-track error), and `MPCController` (linear MPC over a lateral error model,
   solved each step as a condensed QP via Eigen).
-- **Reference paths**: closed oval and figure-eight, selectable live.
+- **Reference paths**: closed oval and figure-eight, plus five stylized real-world circuit shapes --
+  Suzuka, Monaco, Silverstone, Spa-Francorchamps, and Monza -- selectable live. These are scaled-down
+  approximations of each circuit's recognizable silhouette/corner sequence, not surveyed GPS coordinates.
+- **Road rendering**: each path is drawn as a filled asphalt road ribbon with alternating red/white curbs,
+  not just a centerline outline. The car itself is a procedural vector silhouette (tapered body, cabin,
+  headlights, wheels) rather than a plain rectangle.
 - **Live tuning**: vehicle physical parameters (wheelbase, max steer, cornering stiffness, mass, yaw inertia,
   CG offsets) via ImGui sliders, applied on the very next simulation step.
 - **Telemetry**: live ImPlot time-series of side-slip angle, yaw rate, cross-track error, steering command,
@@ -39,11 +45,13 @@ cmake --build build -j"$(nproc)"
 
 The codebase is split into five modules under `include/<module>/` + `src/<module>/`:
 
-- `core/` — vehicle state/params, the kinematic and dynamic bicycle models, path geometry, YAML config.
+- `core/` — vehicle state/params, the kinematic and dynamic bicycle models, path geometry (including the
+  five circuit shape generators), YAML config.
 - `controller/` — Pure Pursuit, Stanley, and MPC controllers, all behind a common `IController` interface.
 - `engine/` — `SimulationEngine` (the fixed-timestep update loop) and `ModelFactory` (builds models/
   controllers by name, so new ones become selectable in the UI without touching the GUI code).
-- `renderer/` — SFML-based 2D rendering with a follow-camera.
+- `renderer/` — SFML-based 2D rendering with a follow-camera: an asphalt road ribbon with curbs, and a
+  procedural vector car silhouette.
 - `gui/` — ImGui/ImPlot panels for parameters, playback control, and telemetry.
 
 Models and controllers are Strategy-pattern implementations swappable at runtime; the renderer and GUI

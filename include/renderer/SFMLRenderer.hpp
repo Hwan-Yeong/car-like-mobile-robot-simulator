@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+
 #include <SFML/Graphics.hpp>
 
 #include "core/VehicleState.hpp"
@@ -22,10 +24,22 @@ public:
     void draw();
 
 private:
+    void drawRoad();
+    void drawCar();
+
     sf::RenderWindow& window_;
     Camera camera_;
     core::Path path_;
     core::VehicleState latest_state_;
+
+    // Car silhouette, defined once in car-local meters (origin = vehicle reference
+    // point, +x = forward) and redrawn each frame via a translate+rotate+scale
+    // sf::Transform -- see drawCar().
+    sf::ConvexShape car_body_;
+    sf::ConvexShape car_cabin_;
+    sf::CircleShape headlight_left_;
+    sf::CircleShape headlight_right_;
+    std::array<sf::RectangleShape, 4> wheels_;
 };
 
 } // namespace renderer

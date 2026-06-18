@@ -23,4 +23,10 @@ double initialHeading(const Path& path);
 // Minimum perpendicular distance from `point` to the closed path polyline.
 double crossTrackError(const Waypoint& point, const Path& path);
 
+// Smooths a closed loop of sparse anchor points into a dense path via uniform
+// Catmull-Rom interpolation (points_per_segment samples between each pair of
+// anchors). Used to turn a small hand-placed control-point outline into a
+// drivable curved track.
+Path smoothClosedPath(const std::vector<Waypoint>& control_points, int points_per_segment);
+
 } // namespace core

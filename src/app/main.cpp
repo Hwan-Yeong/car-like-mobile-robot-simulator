@@ -9,6 +9,7 @@
 #include <imgui.h>
 #include <implot.h>
 
+#include "core/Circuits.hpp"
 #include "core/Config.hpp"
 #include "core/VehicleParams.hpp"
 #include "core/VehicleState.hpp"
@@ -27,8 +28,18 @@ core::Path makePath(int path_index) {
         case 0:
             return core::makeOvalPath(/*radius_x=*/30.0, /*radius_y=*/15.0, /*num_points=*/64);
         case 1:
-        default:
             return core::makeFigureEightPath(/*scale=*/25.0, /*num_points=*/64);
+        case 2:
+            return core::makeSuzukaPath();
+        case 3:
+            return core::makeMonacoPath();
+        case 4:
+            return core::makeSilverstonePath();
+        case 5:
+            return core::makeSpaPath();
+        case 6:
+        default:
+            return core::makeMonzaPath();
     }
 }
 
@@ -58,7 +69,9 @@ int main() {
     const core::SimulationConfig file_config = core::loadConfig("config/config.yaml");
 
     core::VehicleParams params = file_config.vehicle_params;
-    const std::vector<std::string> path_names = {"oval", "figure_eight"};
+    const std::vector<std::string> path_names = {"oval",       "figure_eight", "suzuka",
+                                                   "monaco",     "silverstone",  "spa_francorchamps",
+                                                   "monza"};
     const std::vector<std::string> model_names = engine::ModelFactory::vehicleModelNames();
     const std::vector<std::string> controller_names = engine::ModelFactory::controllerNames();
 
