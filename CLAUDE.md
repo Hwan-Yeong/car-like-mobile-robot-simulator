@@ -18,7 +18,7 @@ progress against the list below rather than assuming everything is implemented.
   selection, play/pause/reset, target speed). Oval and figure-eight paths are both selectable.
 - **Phase 3 (done):** `DynamicBicycleModel` (2-DOF lateral dynamics, selectable alongside the kinematic
   model) + `TelemetryPanel` (ImPlot time-series of side-slip, yaw rate, cross-track error, steering, speed).
-- **Phase 4:** `StanleyController` (compare against Pure Pursuit).
+- **Phase 4 (done):** `StanleyController`, selectable alongside Pure Pursuit via the same `ControlPanel` combo.
 - **Phase 5:** MPC controller (Eigen-based QP).
 - **Phase 6:** YAML config loading, README with screenshots/GIFs.
 
@@ -131,5 +131,12 @@ copy at construction — otherwise sliders will silently do nothing.
   `delta = atan2(2*L*sin(alpha), Ld)` where `alpha` is the bearing to the lookahead target relative to
   heading. `findLookaheadTarget` finds the closest path point, then walks forward (wrapping, since paths are
   closed loops) until a point at least `Ld` away is found.
-- **Stanley** (Phase 4) — front-axle reference, cross-track error + heading error.
+- **Stanley** — front-axle reference: `front = (x,y) + wheelbase*(cos(psi), sin(psi))`. Finds the nearest
+  path point to the front axle, then computes `delta = psi_e + atan2(k*e, k_soft + vx)` where `psi_e` is the
+  path tangent heading minus vehicle heading, and `e` is the cross-track error projected onto the *vehicle's*
+  heading (`dx*sin(psi) - dy*cos(psi)`, not the path's tangent normal) — this matches the standard Hoffmann et
+  al. / PythonRobotics formulation; projecting onto the path tangent instead is a common but subtly different
+  mistake. `k_soft` prevents a singular/huge steering command at `vx` near 0. Like Pure Pursuit, it assumes
+  `state.x/y` is close enough to the rear axle that `wheelbase` is the right front-axle offset even when
+  `DynamicBicycleModel` (CG-referenced) is active — a known simplification, not exact for that model.
 - **MPC** (Phase 5) — linearized lateral error model, QP solved each step with Eigen.

@@ -3,6 +3,7 @@
 #include <stdexcept>
 
 #include "controller/PurePursuitController.hpp"
+#include "controller/StanleyController.hpp"
 #include "core/DynamicBicycleModel.hpp"
 #include "core/KinematicBicycleModel.hpp"
 
@@ -27,6 +28,11 @@ std::unique_ptr<controller::IController> ModelFactory::createController(
         constexpr double max_lookahead = 10.0;
         return std::make_unique<controller::PurePursuitController>(params, k, min_lookahead, max_lookahead);
     }
+    if (type_name == "stanley") {
+        constexpr double k = 0.5;
+        constexpr double k_soft = 1.0;
+        return std::make_unique<controller::StanleyController>(params, k, k_soft);
+    }
     throw std::invalid_argument("Unknown controller type: " + type_name);
 }
 
@@ -34,6 +40,6 @@ std::vector<std::string> ModelFactory::vehicleModelNames() {
     return {"kinematic_bicycle", "dynamic_bicycle"};
 }
 
-std::vector<std::string> ModelFactory::controllerNames() { return {"pure_pursuit"}; }
+std::vector<std::string> ModelFactory::controllerNames() { return {"pure_pursuit", "stanley"}; }
 
 } // namespace engine
