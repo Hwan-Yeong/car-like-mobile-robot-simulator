@@ -36,6 +36,7 @@ public:
 
     const core::VehicleState& state() const { return state_; }
     const core::Path& path() const { return path_; }
+    double lastSteering() const { return last_steering_; }
 
 private:
     void notifyObservers();
@@ -44,6 +45,7 @@ private:
     std::unique_ptr<controller::IController> controller_;
     core::Path path_;
     core::VehicleState state_;
+    double last_steering_ = 0.0;
     std::vector<ISimulationObserver*> observers_;
 };
 

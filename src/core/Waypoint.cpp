@@ -1,8 +1,25 @@
 #include "core/Waypoint.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace core {
+
+namespace {
+
+double distanceToSegment(const Waypoint& point, const Waypoint& a, const Waypoint& b) {
+    const double dx = b.x - a.x;
+    const double dy = b.y - a.y;
+    const double len2 = dx * dx + dy * dy;
+    if (len2 == 0.0) {
+        return std::hypot(point.x - a.x, point.y - a.y);
+    }
+    const double t = std::clamp(((point.x - a.x) * dx + (point.y - a.y) * dy) / len2, 0.0, 1.0);
+    return std::hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy));
+}
+
+} // namespace
 
 Path makeOvalPath(double radius_x, double radius_y, int num_points) {
     Path path;
@@ -29,6 +46,16 @@ double initialHeading(const Path& path) {
         return 0.0;
     }
     return std::atan2(path[1].y - path[0].y, path[1].x - path[0].x);
+}
+
+double crossTrackError(const Waypoint& point, const Path& path) {
+    double min_dist = std::numeric_limits<double>::max();
+    for (std::size_t i = 0; i < path.size(); ++i) {
+        const Waypoint& a = path[i];
+        const Waypoint& b = path[(i + 1) % path.size()];
+        min_dist = std::min(min_dist, distanceToSegment(point, a, b));
+    }
+    return min_dist;
 }
 
 } // namespace core

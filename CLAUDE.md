@@ -16,14 +16,15 @@ progress against the list below rather than assuming everything is implemented.
 - **Phase 1 (done):** `KinematicBicycleModel` + `PurePursuitController` + SFML render, car follows an oval path.
 - **Phase 2 (done):** ImGui panels (`ParamPanel` sliders, `ControlPanel` runtime model/controller/path
   selection, play/pause/reset, target speed). Oval and figure-eight paths are both selectable.
-- **Phase 3:** `DynamicBicycleModel` (2-DOF lateral dynamics) + ImPlot telemetry.
+- **Phase 3 (done):** `DynamicBicycleModel` (2-DOF lateral dynamics, selectable alongside the kinematic
+  model) + `TelemetryPanel` (ImPlot time-series of side-slip, yaw rate, cross-track error, steering, speed).
 - **Phase 4:** `StanleyController` (compare against Pure Pursuit).
 - **Phase 5:** MPC controller (Eigen-based QP).
 - **Phase 6:** YAML config loading, README with screenshots/GIFs.
 
-Dependencies are wired into `CMakeLists.txt` only when the phase that needs them starts — e.g. ImPlot isn't
-fetched until Phase 3, Eigen3 isn't linked until Phase 5, yaml-cpp until Phase 6. Don't add a dependency to
-the build before the code that uses it exists.
+Dependencies are wired into `CMakeLists.txt` only when the phase that needs them starts — e.g. Eigen3 isn't
+linked until Phase 5, yaml-cpp until Phase 6. Don't add a dependency to the build before the code that uses
+it exists.
 
 ## Build / run
 
@@ -51,7 +52,10 @@ suppress.
   so it's only `FetchContent_Populate`d (not `MakeAvailable`d) and its source dir is pointed to via the
   `IMGUI_DIR` cache variable that imgui-sfml's own build expects. `IMGUI_SFML_FIND_SFML` is forced `OFF` so it
   links the `sfml-graphics` target our own FetchContent already built, instead of re-running `find_package`.
-  When Phase 3 adds ImPlot, pin it to `v0.17`.
+- ImPlot (`v0.17`) is fetched the same populate-only way as ImGui (no CMakeLists.txt of its own). Its two
+  source files (`implot.cpp`, `implot_items.cpp`) are appended directly to `car_sim`'s sources in
+  `CMakeLists.txt` rather than built as a separate library target — there's no consumer besides `car_sim`,
+  so a dedicated static lib would just add indirection.
 - ImGui persists window positions/sizes to an `imgui.ini` it writes next to the working directory at exit —
   it's gitignored. Delete it if a panel seems to have the wrong position/size after a layout code change;
   `ImGuiCond_FirstUseEver` is silently ignored once a window has a saved entry in that file.
@@ -63,31 +67,39 @@ Header/impl split: public interfaces and types live under `include/<module>/`, i
 
 Modules, in dependency order:
 
-- **`core/`** — value types (`VehicleState` = `[X, Y, psi, vx]`, `VehicleParams`, `Waypoint`/`Path`) and the
-  `IVehicleModel` **Strategy** interface with its implementations (`KinematicBicycleModel` now,
-  `DynamicBicycleModel` in Phase 3).
+- **`core/`** — value types (`VehicleState` = `[X, Y, psi, vx, vy, r]`, `VehicleParams`, `Waypoint`/`Path`,
+  plus path-geometry helpers `initialHeading`/`crossTrackError`) and the `IVehicleModel` **Strategy**
+  interface with its implementations: `KinematicBicycleModel` and `DynamicBicycleModel`.
 - **`controller/`** — the `IController` **Strategy** interface and implementations (`PurePursuitController`
   now, `StanleyController`/MPC controller later). Controllers consume a `VehicleState` + `Path` and return a
   steering command; they don't know which model produced the state.
 - **`engine/`** — `SimulationEngine` owns the current model, controller, path, and state, and drives the
   fixed-timestep update loop (`step(dt)`: ask the controller for steering, advance the model, notify
-  observers). Renderer/GUI panels implement `ISimulationObserver` (**Observer** pattern) and register with
-  `addObserver()` instead of the engine depending on them. `ModelFactory` builds models/controllers from a
-  string type name (**Factory** pattern) so swapping implementations at runtime doesn't require the engine or
-  `main.cpp` to know concrete types.
+  observers, cache the steering value as `lastSteering()` for the telemetry panel to read). Renderer/GUI
+  panels implement `ISimulationObserver` (**Observer** pattern) and register with `addObserver()` instead of
+  the engine depending on them. `ModelFactory` builds models/controllers from a string type name (**Factory**
+  pattern) so swapping implementations at runtime doesn't require the engine or `main.cpp` to know concrete
+  types.
 - **`renderer/`** — `Camera` handles the world(meters, Y-up)↔screen(pixels, Y-down) transform, pan/zoom, and
   follow-cam (recenters on the vehicle each frame). `SFMLRenderer` implements `ISimulationObserver`, drawing
   the path and vehicle each frame using the camera's current `pixelsPerMeter()` — vehicle/path sizes must be
   computed from that, not a hardcoded pixel scale, or they desync from zoom.
-- **`gui/`** — ImGui panels. `ParamPanel` draws sliders for whichever `VehicleParams` fields exist today
-  (`wheelbase`, `max_steer`; Phase 3 adds `Cf`/`Cr`/`m`/`Iz` once `DynamicBicycleModel` needs them) bound
-  directly to a live `VehicleParams&`. `ControlPanel` draws play/pause/reset, target speed, and path/model/
+- **`gui/`** — ImGui panels. `ParamPanel` draws sliders for `VehicleParams`, grouped by which model uses them
+  (kinematic: `wheelbase`/`max_steer`; dynamic: `Cf`/`Cr`/`m`/`Iz`/`a`/`b`) bound directly to a live
+  `VehicleParams&` — all sliders are always visible regardless of which model is active, since switching
+  models at runtime is the point. `ControlPanel` draws play/pause/reset, target speed, and path/model/
   controller selectors, but is deliberately ignorant of `engine::SimulationEngine` — it only mutates a plain
   `ControlPanelState` struct that `main.cpp` reads each frame and acts on (calling `setPath`/`setModel`/
   `setController`/`setSpeed`/`reset`). This keeps `gui/` decoupled from `engine/`; it depends only on
-  `core/` types and primitives. `TelemetryPanel` (Phase 3) will follow the same pattern with ImPlot.
-  Combo box contents come from `ModelFactory::vehicleModelNames()`/`controllerNames()`, not hardcoded lists,
-  so registering a new model/controller in the factory is enough to make it selectable.
+  `core/` types and primitives. `TelemetryPanel` follows the same pattern: a `record(time, beta, yaw_rate,
+  cross_track_error, steering, speed)` call once per *executed* simulation step (not per render frame, so the
+  time axis tracks simulated time, not frame rate) feeds rolling buffers that `draw()` renders as five
+  stacked ImPlot line plots. Combo box contents come from `ModelFactory::vehicleModelNames()`/
+  `controllerNames()`, not hardcoded lists, so registering a new model/controller in the factory is enough to
+  make it selectable.
+- ImGui and ImPlot contexts are created/destroyed in `main.cpp` around the event loop: `ImGui::SFML::Init`
+  creates the ImGui context implicitly, so `ImPlot::CreateContext()` only needs to run after that; on
+  shutdown, destroy in the reverse order (`ImPlot::DestroyContext()` before `ImGui::SFML::Shutdown()`).
 
 **Live parameter tuning:** `KinematicBicycleModel` and `PurePursuitController` hold a `const VehicleParams*`
 rather than a copy, and `ModelFactory::createVehicleModel`/`createController` take a pointer too. `main.cpp`
@@ -98,12 +110,20 @@ copy at construction — otherwise sliders will silently do nothing.
 
 ### Vehicle model math (get this right — it's the point of the project)
 
-- **`KinematicBicycleModel`** — rear-axle reference, state `[X, Y, psi, vx]`:
+- **`KinematicBicycleModel`** — rear-axle reference, integrates `[X, Y, psi]`:
   `Xdot = vx*cos(psi)`, `Ydot = vx*sin(psi)`, `psidot = vx*tan(delta)/L`. Integrated with RK4
-  (`vx` and `delta` held constant across the integration step — there's no throttle input yet).
-- **`DynamicBicycleModel`** (Phase 3) — 2-DOF lateral dynamics, state `[vy` (or `beta`), `r]`, linear tire
-  model `Fy = C*alpha`, Newton's law for lateral force + yaw moment, with longitudinal velocity `vx` treated
-  as a slowly-varying parameter rather than a state. Also integrated with RK4.
+  (`vx` and `delta` held constant across the integration step — there's no throttle input yet). Writes
+  `vy = 0` and `r = (psi_next - psi) / dt` back into the output state purely so `TelemetryPanel`'s yaw-rate
+  plot stays meaningful when this model is active — the kinematic model has no notion of side-slip.
+- **`DynamicBicycleModel`** — 2-DOF lateral dynamics, integrates `[X, Y, psi, vy, r]` with `vx` held constant
+  as a parameter (same "slowly varying, not a state" treatment as the kinematic model's `vx`). Linear tire
+  model: `alpha_f = delta - (vy + a*r)/vx`, `alpha_r = (b*r - vy)/vx`, `Fyf = Cf*alpha_f`, `Fyr = Cr*alpha_r`;
+  Newton's law gives `vy_dot = -vx*r + (Fyf+Fyr)/m` and `r_dot = (a*Fyf - b*Fyr)/Iz`; global position updates
+  via `Xdot = vx*cos(psi) - vy*sin(psi)`, `Ydot = vx*sin(psi) + vy*cos(psi)`, `psidot = r`. Integrated with
+  RK4. The slip-angle division guards `vx` with a small floor (`kMinVx = 0.5`) since the linear bicycle model
+  is singular at zero speed — this is a sandbox simplification, not a real low-speed model. Default params
+  (`a=1.2`, `b=1.5`, so `a+b` equals the default `wheelbase=2.7`; `m=1500`, `Iz=2250`, `Cf=Cr=80000`) are
+  representative sedan-ish values, not measured from a real vehicle.
 
 ### Controllers
 

@@ -48,14 +48,31 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(imgui_sfml)
 
+# ImPlot also has no CMakeLists.txt of its own -- populate-only, like ImGui above.
+FetchContent_Declare(
+  implot
+  GIT_REPOSITORY https://github.com/epezent/implot.git
+  GIT_TAG v0.17
+  GIT_SHALLOW ON
+)
+FetchContent_GetProperties(implot)
+if(NOT implot_POPULATED)
+  FetchContent_Populate(implot)
+endif()
+
 file(GLOB_RECURSE SIM_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_SOURCE_DIR}/src/*.cpp
+)
+list(APPEND SIM_SOURCES
+  ${implot_SOURCE_DIR}/implot.cpp
+  ${implot_SOURCE_DIR}/implot_items.cpp
 )
 
 add_executable(car_sim ${SIM_SOURCES})
 
 target_include_directories(car_sim PRIVATE
   ${CMAKE_SOURCE_DIR}/include
+  ${implot_SOURCE_DIR}
 )
 
 target_link_libraries(car_sim PRIVATE

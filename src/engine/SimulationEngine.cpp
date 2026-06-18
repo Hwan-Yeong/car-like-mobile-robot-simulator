@@ -13,8 +13,8 @@ SimulationEngine::SimulationEngine(std::unique_ptr<core::IVehicleModel> model,
 void SimulationEngine::addObserver(ISimulationObserver* observer) { observers_.push_back(observer); }
 
 void SimulationEngine::step(double dt) {
-    const double delta = controller_->computeSteering(state_, path_);
-    state_ = model_->step(state_, delta, dt);
+    last_steering_ = controller_->computeSteering(state_, path_);
+    state_ = model_->step(state_, last_steering_, dt);
     notifyObservers();
 }
 

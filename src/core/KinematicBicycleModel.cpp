@@ -36,6 +36,8 @@ VehicleState KinematicBicycleModel::step(const VehicleState& state, double delta
     next.x += (dt / 6.0) * (k1.xdot + 2.0 * k2.xdot + 2.0 * k3.xdot + k4.xdot);
     next.y += (dt / 6.0) * (k1.ydot + 2.0 * k2.ydot + 2.0 * k3.ydot + k4.ydot);
     next.psi += (dt / 6.0) * (k1.psidot + 2.0 * k2.psidot + 2.0 * k3.psidot + k4.psidot);
+    next.vy = 0.0;             // no side-slip in a pure kinematic model
+    next.r = (next.psi - state.psi) / dt;  // realized yaw rate, for telemetry only
     return next;
 }
 

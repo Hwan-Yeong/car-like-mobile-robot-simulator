@@ -20,4 +20,7 @@ Path makeFigureEightPath(double scale, int num_points);
 // Heading [rad] tangent to the path at its first point, from the first two waypoints.
 double initialHeading(const Path& path);
 
+// Minimum perpendicular distance from `point` to the closed path polyline.
+double crossTrackError(const Waypoint& point, const Path& path);
+
 } // namespace core

@@ -1,9 +1,11 @@
+#include <cmath>
 #include <string>
 #include <vector>
 
 #include <SFML/Graphics.hpp>
 #include <imgui-SFML.h>
 #include <imgui.h>
+#include <implot.h>
 
 #include "core/VehicleParams.hpp"
 #include "core/VehicleState.hpp"
@@ -12,6 +14,7 @@
 #include "engine/SimulationEngine.hpp"
 #include "gui/ControlPanel.hpp"
 #include "gui/ParamPanel.hpp"
+#include "gui/TelemetryPanel.hpp"
 #include "renderer/SFMLRenderer.hpp"
 
 namespace {
@@ -59,6 +62,7 @@ int main() {
     if (!ImGui::SFML::Init(window)) {
         return 1;
     }
+    ImPlot::CreateContext();
 
     renderer::SFMLRenderer car_renderer(window);
     car_renderer.setPath(path);
@@ -67,11 +71,13 @@ int main() {
 
     gui::ParamPanel param_panel;
     gui::ControlPanel control_panel;
+    gui::TelemetryPanel telemetry_panel;
     int prev_path_index = control_state.path_index;
     int prev_model_index = control_state.model_index;
     int prev_controller_index = control_state.controller_index;
 
     constexpr double dt = 1.0 / 60.0;
+    double sim_time = 0.0;
     sf::Clock delta_clock;
 
     while (window.isOpen()) {
@@ -86,6 +92,7 @@ int main() {
         ImGui::SFML::Update(window, delta_clock.restart());
         param_panel.draw(params);
         control_panel.draw(control_state, path_names, model_names, controller_names);
+        telemetry_panel.draw();
 
         if (control_state.path_index != prev_path_index) {
             core::Path new_path = makePath(control_state.path_index);
@@ -113,6 +120,12 @@ int main() {
 
         if (!control_state.paused) {
             sim.step(dt);
+            sim_time += dt;
+
+            const core::VehicleState& s = sim.state();
+            const double beta = std::atan2(s.vy, s.vx);
+            const double cross_track_error = core::crossTrackError({s.x, s.y}, sim.path());
+            telemetry_panel.record(sim_time, beta, s.r, cross_track_error, sim.lastSteering(), s.vx);
         }
 
         window.clear(sf::Color(30, 30, 30));
@@ -121,6 +134,7 @@ int main() {
         window.display();
     }
 
+    ImPlot::DestroyContext();
     ImGui::SFML::Shutdown();
     return 0;
 }
