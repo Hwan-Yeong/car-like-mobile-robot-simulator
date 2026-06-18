@@ -1,0 +1,18 @@
+vehicle_params:
+  wheelbase: 2.7    # L: distance between front and rear axles [m]
+  max_steer: 0.6    # max |delta| [rad]
+  max_accel: 3.0    # [m/s^2], reserved for future controllers
+
+  # DynamicBicycleModel (2-DOF lateral dynamics) params. a + b should equal wheelbase.
+  cf: 80000.0       # front cornering stiffness [N/rad]
+  cr: 80000.0       # rear cornering stiffness [N/rad]
+  m: 1500.0         # vehicle mass [kg]
+  iz: 2250.0        # yaw moment of inertia [kg*m^2]
+  a: 1.2            # distance from CG to front axle [m]
+  b: 1.5            # distance from CG to rear axle [m]
+
+simulation:
+  initial_path: oval               # oval | figure_eight
+  initial_model: kinematic_bicycle # kinematic_bicycle | dynamic_bicycle
+  initial_controller: pure_pursuit # pure_pursuit | stanley | mpc
+  target_speed: 5.0                # [m/s]

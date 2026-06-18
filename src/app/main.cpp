@@ -1,4 +1,6 @@
+#include <algorithm>
 #include <cmath>
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -7,6 +9,7 @@
 #include <imgui.h>
 #include <implot.h>
 
+#include "core/Config.hpp"
 #include "core/VehicleParams.hpp"
 #include "core/VehicleState.hpp"
 #include "core/Waypoint.hpp"
@@ -38,16 +41,32 @@ core::VehicleState makeResetState(const core::Path& path, double target_speed) {
     return state;
 }
 
+// Index of `name` in `names`, or 0 (with a warning) if not found -- used to turn
+// the config file's human-readable names into ControlPanelState's combo indices.
+int indexOrDefault(const std::vector<std::string>& names, const std::string& name) {
+    const auto it = std::find(names.begin(), names.end(), name);
+    if (it == names.end()) {
+        std::cerr << "Config: unknown name '" << name << "', defaulting to '" << names.front() << "'\n";
+        return 0;
+    }
+    return static_cast<int>(std::distance(names.begin(), it));
+}
+
 } // namespace
 
 int main() {
-    core::VehicleParams params;
+    const core::SimulationConfig file_config = core::loadConfig("config/config.yaml");
+
+    core::VehicleParams params = file_config.vehicle_params;
     const std::vector<std::string> path_names = {"oval", "figure_eight"};
     const std::vector<std::string> model_names = engine::ModelFactory::vehicleModelNames();
     const std::vector<std::string> controller_names = engine::ModelFactory::controllerNames();
 
     gui::ControlPanelState control_state;
-    control_state.target_speed = 5.0;
+    control_state.target_speed = file_config.target_speed;
+    control_state.path_index = indexOrDefault(path_names, file_config.initial_path);
+    control_state.model_index = indexOrDefault(model_names, file_config.initial_model);
+    control_state.controller_index = indexOrDefault(controller_names, file_config.initial_controller);
 
     core::Path path = makePath(control_state.path_index);
     core::VehicleState initial_state = makeResetState(path, control_state.target_speed);

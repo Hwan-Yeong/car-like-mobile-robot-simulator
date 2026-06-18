@@ -10,6 +10,9 @@ vehicle model and path-tracking controller are swappable at runtime, physical pa
 sliders, and telemetry is plotted live. Correctness of the kinematics/control math and clean OOP architecture
 (explicit design patterns) matter more than visual fidelity here.
 
+`README.md` covers the same project at a glance for a portfolio audience (features, screenshots, build/run);
+this file is the deeper architecture/math reference.
+
 The project is built in phases, each one compiling and running before the next starts. Track current phase
 progress against the list below rather than assuming everything is implemented.
 
@@ -21,10 +24,15 @@ progress against the list below rather than assuming everything is implemented.
 - **Phase 4 (done):** `StanleyController`, selectable alongside Pure Pursuit via the same `ControlPanel` combo.
 - **Phase 5 (done):** `MPCController` (condensed linear MPC solved via Eigen), selectable alongside Pure
   Pursuit and Stanley.
-- **Phase 6:** YAML config loading, README with screenshots/GIFs.
+- **Phase 6 (done):** YAML startup config (`config/config.yaml` + `core::loadConfig`) and `README.md` with
+  screenshots. No animated GIFs — ffmpeg/imagemagick weren't available in the dev environment and installing
+  them needed a sudo password that wasn't available either, so the user chose static PNGs only.
 
-Dependencies are wired into `CMakeLists.txt` only when the phase that needs them starts — e.g. yaml-cpp
-isn't linked until Phase 6. Don't add a dependency to the build before the code that uses it exists.
+All six planned phases are complete. Further work (new models/controllers/paths, tests, packaging) isn't
+scoped yet — ask before assuming a "Phase 7."
+
+Dependencies are wired into `CMakeLists.txt` only when the phase that needs them starts. Don't add a
+dependency to the build before the code that uses it exists.
 
 ## Build / run
 
@@ -45,10 +53,9 @@ suppress.
 - Ubuntu 22.04's apt only ships SFML 2.5.1; the project needs 2.6, so `CMakeLists.txt` fetches and builds
   SFML 2.6.1 from source via `FetchContent` rather than `find_package`. Audio/network SFML modules are
   disabled (`SFML_BUILD_AUDIO`/`SFML_BUILD_NETWORK` OFF) since this project has no sound and no networking.
-- Eigen3 (3.4.0) and yaml-cpp (0.7.0) are available as system packages (`libeigen3-dev`, `libyaml-cpp-dev`).
-  Eigen3 is wired in via `find_package(Eigen3 3.4 REQUIRED)` + `Eigen3::Eigen` (header-only, no FetchContent
-  needed since the system package ships a proper CMake config). Use the same `find_package` approach for
-  yaml-cpp when Phase 6 wires it in.
+- Eigen3 (3.4.0) and yaml-cpp (0.7.0) are available as system packages (`libeigen3-dev`, `libyaml-cpp-dev`),
+  both wired in via `find_package` (no FetchContent needed since both ship proper CMake configs):
+  `Eigen3::Eigen` and the plain (non-namespaced) `yaml-cpp` imported target.
 - ImGui (`v1.91.6`) and imgui-sfml (`v2.6.1` — the SFML-2.x compatible release; `master` now targets SFML 3
   and won't link) are fetched via `FetchContent` in `CMakeLists.txt`. ImGui has no CMakeLists.txt of its own,
   so it's only `FetchContent_Populate`d (not `MakeAvailable`d) and its source dir is pointed to via the
@@ -70,8 +77,9 @@ Header/impl split: public interfaces and types live under `include/<module>/`, i
 Modules, in dependency order:
 
 - **`core/`** — value types (`VehicleState` = `[X, Y, psi, vx, vy, r]`, `VehicleParams`, `Waypoint`/`Path`,
-  plus path-geometry helpers `initialHeading`/`crossTrackError`) and the `IVehicleModel` **Strategy**
-  interface with its implementations: `KinematicBicycleModel` and `DynamicBicycleModel`.
+  plus path-geometry helpers `initialHeading`/`crossTrackError`), the `IVehicleModel` **Strategy** interface
+  with its implementations (`KinematicBicycleModel`, `DynamicBicycleModel`), and `SimulationConfig`/
+  `loadConfig` for startup YAML config.
 - **`controller/`** — the `IController` **Strategy** interface and implementations (`PurePursuitController`,
   `StanleyController`, `MPCController`). Controllers consume a `VehicleState` + `Path` and return a steering
   command; they don't know which model produced the state.
@@ -103,12 +111,23 @@ Modules, in dependency order:
   creates the ImGui context implicitly, so `ImPlot::CreateContext()` only needs to run after that; on
   shutdown, destroy in the reverse order (`ImPlot::DestroyContext()` before `ImGui::SFML::Shutdown()`).
 
-**Live parameter tuning:** `KinematicBicycleModel` and `PurePursuitController` hold a `const VehicleParams*`
-rather than a copy, and `ModelFactory::createVehicleModel`/`createController` take a pointer too. `main.cpp`
-owns the one `VehicleParams` instance and passes its address through; `ParamPanel` mutates that same instance
-directly via ImGui sliders, so changes apply on the very next `step()` with no extra wiring. Any future
-model/controller that reads tunable params needs to follow the same by-pointer pattern, not take a by-value
-copy at construction — otherwise sliders will silently do nothing.
+**Live parameter tuning:** every model and controller (`KinematicBicycleModel`, `DynamicBicycleModel`,
+`PurePursuitController`, `StanleyController`, `MPCController`) holds a `const VehicleParams*` rather than a
+copy, and `ModelFactory::createVehicleModel`/`createController` take a pointer too. `main.cpp` owns the one
+`VehicleParams` instance (seeded from `config/config.yaml` at startup) and passes its address through;
+`ParamPanel` mutates that same instance directly via ImGui sliders, so changes apply on the very next
+`step()` with no extra wiring. Any future model/controller that reads tunable params needs to follow the
+same by-pointer pattern, not take a by-value copy at construction — otherwise sliders will silently do
+nothing.
+
+**Startup config:** `core::loadConfig("config/config.yaml")` returns a `SimulationConfig` (vehicle params +
+initial path/model/controller names + target speed), falling back field-by-field to hardcoded defaults if
+the file is missing, partially filled in, or fails to parse — a bad config should never prevent the
+simulator from starting. `main.cpp` resolves the config's path/model/controller *names* to `ControlPanelState`
+indices via `indexOrDefault`, which looks them up in the same `ModelFactory::vehicleModelNames()`/
+`controllerNames()` lists the GUI combos use, so the config file and the GUI can never disagree about what
+names are valid. The binary expects to be run from the repo root (`./build/car_sim`) since the config path
+is relative.
 
 ### Vehicle model math (get this right — it's the point of the project)
 
